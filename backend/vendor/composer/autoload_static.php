@@ -17,6 +17,10 @@ class ComposerStaticInit13584c084b53ff23cf98cc2a03440480
         array (
             'PhpParser\\' => 10,
         ),
+        'F' => 
+        array (
+            'Firebase\\JWT\\' => 13,
+        ),
         'D' => 
         array (
             'DeepCopy\\' => 9,
@@ -27,6 +31,10 @@ class ComposerStaticInit13584c084b53ff23cf98cc2a03440480
         'PhpParser\\' => 
         array (
             0 => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser',
+        ),
+        'Firebase\\JWT\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/firebase/php-jwt/src',
         ),
         'DeepCopy\\' => 
         array (

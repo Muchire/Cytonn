@@ -1,17 +1,20 @@
 <?php
 // config/email.php - Email configuration
-require_once 'vendor/autoload.php';
+require_once '/home/vivian/Documents/Cytonn/backend/vendor/autoload.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 class EmailService {
     private $smtp_host = 'smtp.gmail.com';
     private $smtp_port = 587;
-    private $smtp_username = 'your-email@gmail.com';
-    private $smtp_password = 'your-app-password';
-    private $from_email = 'your-email@gmail.com';
+    private $smtp_username = 'psvfinder@gmail.com';
+    private $smtp_password = 'chrm rflb xdfd gign';
+    private $from_email = 'psvfinder@gmail.com';
     private $from_name = 'Task Manager System';
 
     public function sendEmail($to_email, $to_name, $subject, $body) {
-        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        $mail = new PHPMailer(true);
         
         try {
             // Server settings
@@ -20,7 +23,7 @@ class EmailService {
             $mail->SMTPAuth = true;
             $mail->Username = $this->smtp_username;
             $mail->Password = $this->smtp_password;
-            $mail->SMTPSecure = PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port = $this->smtp_port;
 
             // Recipients

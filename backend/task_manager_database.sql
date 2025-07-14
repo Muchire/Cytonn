@@ -35,13 +35,13 @@ CREATE TABLE tasks (
 -- Insert sample admin user
 -- Password is 'password' (hashed with PHP password_hash())
 INSERT INTO users (username, email, full_name, password, role) VALUES 
-('admin', 'admin@school.com', 'Administrator', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin');
+('admin', 'admin@school.com', 'Administrator', 'admin12345', 'admin');
 
 -- Insert sample student users
 INSERT INTO users (username, email, full_name, password, role) VALUES 
-('student1', 'student1@school.com', 'John Doe', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student'),
-('student2', 'student2@school.com', 'Jane Smith', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student'),
-('student3', 'student3@school.com', 'Bob Johnson', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student');
+('John', 'john@school.com', 'John Doe', 'john12345', 'student'),
+('Jane', 'jane@school.com', 'Jane Smith', 'jane12345', 'student'),
+('Bob', 'bob@school.com', 'Bob Johnson', 'bob12345', 'student');
 
 -- Insert sample tasks
 INSERT INTO tasks (title, description, assigned_to, deadline, created_by, status) VALUES 

@@ -1,68 +1,149 @@
 <?php
-// models/User.php - User model
+// models/user.php - User model class
 class User {
-    private $conn;
-    private $table = 'users';
+    private $db;
 
-    public function __construct($db) {
-        $this->conn = $db;
+    public function __construct($database) {
+        $this->db = $database;
     }
 
-    // Get all users
-    public function getUsers() {
-        $query = "SELECT id, username, email, full_name, role, created_at FROM " . $this->table . " ORDER BY created_at DESC";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Login method
+    public function login($username, $password) {
+        try {
+            $query = "SELECT id, username, email, full_name, role, password FROM users WHERE username = :username";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':username', $username);
+            $stmt->execute();
+            
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user && password_verify($password, $user['password'])) {
+                // Remove password from returned data
+                unset($user['password']);
+                return $user;
+            }
+            
+            return false;
+        } catch (PDOException $e) {
+            error_log("Login error: " . $e->getMessage());
+            return false;
+        }
     }
 
     // Get user by ID
     public function getUserById($id) {
-        $query = "SELECT id, username, email, full_name, role, created_at FROM " . $this->table . " WHERE id = ? LIMIT 1";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(1, $id);
-        $stmt->execute();
-        return $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            $query = "SELECT id, username, email, full_name, role, created_at FROM users WHERE id = :id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':id', $id);
+            $stmt->execute();
+            
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get user by ID error: " . $e->getMessage());
+            return false;
+        }
     }
 
-    // Create new user
-    public function createUser($username, $email, $full_name, $password, $role = 'student') {
-        $query = "INSERT INTO " . $this->table . " (username, email, full_name, password, role) VALUES (?, ?, ?, ?, ?)";
-        $stmt = $this->conn->prepare($query);
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        
-        if($stmt->execute([$username, $email, $full_name, $hashed_password, $role])) {
-            return $this->conn->lastInsertId();
+    // Get all users
+    public function getUsers() {
+        try {
+            $query = "SELECT id, username, email, full_name, role, created_at FROM users ORDER BY created_at DESC";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute();
+            
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get users error: " . $e->getMessage());
+            return false;
         }
-        return false;
+    }
+
+    // Create user
+    public function createUser($username, $email, $full_name, $password, $role = 'student') {
+        try {
+            $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+            
+            $query = "INSERT INTO users (username, email, full_name, password, role) VALUES (:username, :email, :full_name, :password, :role)";
+            $stmt = $this->db->prepare($query);
+            
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':full_name', $full_name);
+            $stmt->bindParam(':password', $hashed_password);
+            $stmt->bindParam(':role', $role);
+            
+            if ($stmt->execute()) {
+                return $this->db->lastInsertId();
+            }
+            return false;
+        } catch (PDOException $e) {
+            error_log("Create user error: " . $e->getMessage());
+            throw $e; // Re-throw to handle in the API
+        }
     }
 
     // Update user
     public function updateUser($id, $username, $email, $full_name, $role) {
-        $query = "UPDATE " . $this->table . " SET username = ?, email = ?, full_name = ?, role = ? WHERE id = ?";
-        $stmt = $this->conn->prepare($query);
-        return $stmt->execute([$username, $email, $full_name, $role, $id]);
+        try {
+            $query = "UPDATE users SET username = :username, email = :email, full_name = :full_name, role = :role WHERE id = :id";
+            $stmt = $this->db->prepare($query);
+            
+            $stmt->bindParam(':id', $id);
+            $stmt->bindParam(':username', $username);
+            $stmt->bindParam(':email', $email);
+            $stmt->bindParam(':full_name', $full_name);
+            $stmt->bindParam(':role', $role);
+            
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            error_log("Update user error: " . $e->getMessage());
+            throw $e; // Re-throw to handle in the API
+        }
+    }
+
+    // Update password
+    public function updatePassword($id, $current_password, $new_password) {
+        try {
+            // First, verify current password
+            $query = "SELECT password FROM users WHERE id = :id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':id', $id);
+            $stmt->execute();
+            
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user || !password_verify($current_password, $user['password'])) {
+                return false;
+            }
+            
+            // Update password
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+            $query = "UPDATE users SET password = :password WHERE id = :id";
+            $stmt = $this->db->prepare($query);
+            
+            $stmt->bindParam(':id', $id);
+            $stmt->bindParam(':password', $hashed_password);
+            
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            error_log("Update password error: " . $e->getMessage());
+            return false;
+        }
     }
 
     // Delete user
     public function deleteUser($id) {
-        $query = "DELETE FROM " . $this->table . " WHERE id = ?";
-        $stmt = $this->conn->prepare($query);
-        return $stmt->execute([$id]);
-    }
-
-    // Login user
-    public function login($username, $password) {
-        $query = "SELECT id, username, email, full_name, password, role FROM " . $this->table . " WHERE username = ? OR email = ? LIMIT 1";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute([$username, $username]);
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if($user && password_verify($password, $user['password'])) {
-            unset($user['password']);
-            return $user;
+        try {
+            $query = "DELETE FROM users WHERE id = :id";
+            $stmt = $this->db->prepare($query);
+            $stmt->bindParam(':id', $id);
+            
+            return $stmt->execute();
+        } catch (PDOException $e) {
+            error_log("Delete user error: " . $e->getMessage());
+            return false;
         }
-        return false;
     }
 }
 ?>

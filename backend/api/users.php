@@ -1,5 +1,5 @@
 <?php
-// api/users.php - User API endpoints
+// api/users.php - Protected User API endpoints with JWT authorization
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -9,49 +9,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
 
-require_once '../config/database.php';
-require_once '../models/User.php';
+require_once '/home/vivian/Documents/Cytonn/backend/config/database.php';
+require_once '/home/vivian/Documents/Cytonn/backend/config/jwt.php';
+require_once '/home/vivian/Documents/Cytonn/backend/models/user.php';
 
 $database = new Database();
 $db = $database->connect();
 $user = new User($db);
+$jwt = new JWTAuth();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path_parts = explode('/', trim($path, '/'));
 
+// Extract user ID from URL path
+$user_id = null;
+if (count($path_parts) >= 3 && $path_parts[1] === 'users' && is_numeric($path_parts[2])) {
+    $user_id = (int)$path_parts[2];
+}
+
+// Helper function to send JSON response
+function sendResponse($success, $data = null, $message = '', $statusCode = 200) {
+    http_response_code($statusCode);
+    $response = ['success' => $success];
+    if ($data !== null) $response['data'] = $data;
+    if ($message !== '') $response['message'] = $message;
+    echo json_encode($response);
+    exit;
+}
+
+// Authenticate user for all requests
+$current_user = $jwt->authenticate();
+
 switch($method) {
     case 'GET':
-        if(isset($_GET['id'])) {
-            // Get single user
-            $result = $user->getUserById($_GET['id']);
-            if($result) {
-                echo json_encode(['success' => true, 'data' => $result]);
+        if ($user_id) {
+            // GET /api/users/123 - Get single user
+            // Users can only access their own data, admins can access any user's data
+            if (!$jwt->canAccessUserData($user_id, $current_user)) {
+                sendResponse(false, null, 'Access denied', 403);
+            }
+            
+            $result = $user->getUserById($user_id);
+            if ($result) {
+                sendResponse(true, $result);
             } else {
-                http_response_code(404);
-                echo json_encode(['success' => false, 'message' => 'User not found']);
+                sendResponse(false, null, 'User not found', 404);
             }
         } else {
-            // Get all users
+            // GET /api/users - Get all users (admin only)
+            $jwt->authorize(['admin'], $current_user);
+            
             $result = $user->getUsers();
-            echo json_encode(['success' => true, 'data' => $result]);
+            sendResponse(true, $result);
         }
         break;
 
     case 'POST':
+        // POST /api/users - Create new user (admin only)
+        $jwt->authorize(['admin'], $current_user);
+        
         $data = json_decode(file_get_contents('php://input'), true);
         
-        if(isset($data['action']) && $data['action'] === 'login') {
-            // Login
-            $result = $user->login($data['username'], $data['password']);
-            if($result) {
-                echo json_encode(['success' => true, 'data' => $result, 'message' => 'Login successful']);
-            } else {
-                http_response_code(401);
-                echo json_encode(['success' => false, 'message' => 'Invalid credentials']);
+        if (!$data) {
+            sendResponse(false, null, 'Invalid JSON data', 400);
+        }
+        
+        $required_fields = ['username', 'email', 'full_name', 'password'];
+        foreach ($required_fields as $field) {
+            if (!isset($data[$field]) || empty($data[$field])) {
+                sendResponse(false, null, "Field '$field' is required", 400);
             }
-        } else {
-            // Create user
+        }
+        
+        try {
             $result = $user->createUser(
                 $data['username'],
                 $data['email'],
@@ -60,45 +91,144 @@ switch($method) {
                 $data['role'] ?? 'student'
             );
             
-            if($result) {
-                echo json_encode(['success' => true, 'data' => ['id' => $result], 'message' => 'User created successfully']);
+            if ($result) {
+                sendResponse(true, ['id' => $result], 'User created successfully', 201);
             } else {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'message' => 'Failed to create user']);
+                sendResponse(false, null, 'Failed to create user', 500);
+            }
+        } catch (PDOException $e) {
+            if ($e->getCode() == 23000) {
+                if (strpos($e->getMessage(), 'username') !== false) {
+                    sendResponse(false, null, 'Username already exists', 409);
+                } elseif (strpos($e->getMessage(), 'email') !== false) {
+                    sendResponse(false, null, 'Email already exists', 409);
+                } else {
+                    sendResponse(false, null, 'Duplicate entry', 409);
+                }
+            } else {
+                sendResponse(false, null, 'Database error: ' . $e->getMessage(), 500);
             }
         }
         break;
 
     case 'PUT':
+        if (!$user_id) {
+            sendResponse(false, null, 'User ID is required in URL', 400);
+        }
+        
+        // Users can only update their own data, admins can update any user's data
+        if (!$jwt->canAccessUserData($user_id, $current_user)) {
+            sendResponse(false, null, 'Access denied', 403);
+        }
+        
         $data = json_decode(file_get_contents('php://input'), true);
-        $id = $data['id'];
         
-        $result = $user->updateUser(
-            $id,
-            $data['username'],
-            $data['email'],
-            $data['full_name'],
-            $data['role']
-        );
+        if (!$data) {
+            sendResponse(false, null, 'Invalid JSON data', 400);
+        }
         
-        if($result) {
-            echo json_encode(['success' => true, 'message' => 'User updated successfully']);
+        // Check if user exists
+        $existing_user = $user->getUserById($user_id);
+        if (!$existing_user) {
+            sendResponse(false, null, 'User not found', 404);
+        }
+        
+        // Check if this is a password update
+        if (isset($data['current_password']) && isset($data['new_password'])) {
+            // Password update - users can only update their own password
+            if ($current_user['user_id'] != $user_id) {
+                sendResponse(false, null, 'You can only update your own password', 403);
+            }
+            
+            $result = $user->updatePassword($user_id, $data['current_password'], $data['new_password']);
+            
+            if ($result) {
+                sendResponse(true, null, 'Password updated successfully');
+            } else {
+                sendResponse(false, null, 'Current password is incorrect', 400);
+            }
         } else {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Failed to update user']);
+            // Regular user update
+            $required_fields = ['username', 'email', 'full_name'];
+            
+            // Only admins can update user roles
+            if ($current_user['role'] === 'admin') {
+                $required_fields[] = 'role';
+            } else {
+                // For non-admin users, use the current role
+                $data['role'] = $existing_user['role'];
+            }
+            
+            foreach ($required_fields as $field) {
+                if (!isset($data[$field]) || empty($data[$field])) {
+                    sendResponse(false, null, "Field '$field' is required", 400);
+                }
+            }
+            
+            try {
+                $result = $user->updateUser(
+                    $user_id,
+                    $data['username'],
+                    $data['email'],
+                    $data['full_name'],
+                    $data['role']
+                );
+                
+                if ($result) {
+                    sendResponse(true, null, 'User updated successfully');
+                } else {
+                    sendResponse(false, null, 'Failed to update user', 500);
+                }
+            } catch (PDOException $e) {
+                if ($e->getCode() == 23000) {
+                    if (strpos($e->getMessage(), 'username') !== false) {
+                        sendResponse(false, null, 'Username already exists', 409);
+                    } elseif (strpos($e->getMessage(), 'email') !== false) {
+                        sendResponse(false, null, 'Email already exists', 409);
+                    } else {
+                        sendResponse(false, null, 'Duplicate entry', 409);
+                    }
+                } else {
+                    sendResponse(false, null, 'Database error: ' . $e->getMessage(), 500);
+                }
+            }
         }
         break;
 
     case 'DELETE':
-        $id = $_GET['id'];
-        $result = $user->deleteUser($id);
-        
-        if($result) {
-            echo json_encode(['success' => true, 'message' => 'User deleted successfully']);
-        } else {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Failed to delete user']);
+        if (!$user_id) {
+            sendResponse(false, null, 'User ID is required in URL', 400);
         }
+        
+        // Only admins can delete users
+        $jwt->authorize(['admin'], $current_user);
+        
+        // Check if user exists
+        $existing_user = $user->getUserById($user_id);
+        if (!$existing_user) {
+            sendResponse(false, null, 'User not found', 404);
+        }
+        
+        // Prevent admin from deleting themselves
+        if ($current_user['user_id'] == $user_id) {
+            sendResponse(false, null, 'You cannot delete your own account', 400);
+        }
+        
+        try {
+            $result = $user->deleteUser($user_id);
+            
+            if ($result) {
+                sendResponse(true, null, 'User deleted successfully');
+            } else {
+                sendResponse(false, null, 'Failed to delete user', 500);
+            }
+        } catch (PDOException $e) {
+            sendResponse(false, null, 'Database error: ' . $e->getMessage(), 500);
+        }
+        break;
+
+    default:
+        sendResponse(false, null, 'Method not allowed', 405);
         break;
 }
 ?>
