@@ -3,7 +3,7 @@
         'name' => 'cytonn/backend',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => 'a317b1e65d3b7fe1c2cbfc1034d4c3f369e7fe31',
+        'reference' => 'be0ad2e423286daa615f54ccb1487b373353b796',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -13,7 +13,7 @@
         'cytonn/backend' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => 'a317b1e65d3b7fe1c2cbfc1034d4c3f369e7fe31',
+            'reference' => 'be0ad2e423286daa615f54ccb1487b373353b796',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
@@ -63,6 +63,15 @@
             'install_path' => __DIR__ . '/../phar-io/version',
             'aliases' => array(),
             'dev_requirement' => true,
+        ),
+        'phpmailer/phpmailer' => array(
+            'pretty_version' => 'v6.10.0',
+            'version' => '6.10.0.0',
+            'reference' => 'bf74d75a1fde6beaa34a0ddae2ec5fce0f72a144',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../phpmailer/phpmailer',
+            'aliases' => array(),
+            'dev_requirement' => false,
         ),
         'phpstan/phpstan' => array(
             'pretty_version' => '2.1.17',

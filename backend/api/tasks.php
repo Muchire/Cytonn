@@ -23,10 +23,12 @@ $jwt = new JWTAuth();
 $emailService = new EmailService();
 
 $method = $_SERVER['REQUEST_METHOD'];
+// At the top of your tasks.php file:
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path_parts = explode('/', trim($path, '/'));
-$task_id = null;
 
+// Get task_id from URL path (e.g., /api/tasks.php/3)
+$task_id = null;
 if (count($path_parts) >= 3 && $path_parts[1] === 'tasks.php' && is_numeric($path_parts[2])) {
     $task_id = (int)$path_parts[2];
 }
@@ -42,6 +44,9 @@ function sendResponse($success, $data = null, $message = '', $statusCode = 200) 
 
 // Authenticate user for all requests
 $current_user = $jwt->authenticate();
+if (empty($task_id) && isset($_GET['task_id'])) {
+    $task_id = (int)$_GET['task_id'];
+}
 
 switch($method) {
     case 'GET':

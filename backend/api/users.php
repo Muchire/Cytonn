@@ -22,12 +22,14 @@ $method = $_SERVER['REQUEST_METHOD'];
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $path_parts = explode('/', trim($path, '/'));
 
-// Extract user ID from URL path
 $user_id = null;
-if (count($path_parts) >= 3 && $path_parts[1] === 'users' && is_numeric($path_parts[2])) {
-    $user_id = (int)$path_parts[2];
-}
+$path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$path_parts = array_values(array_filter(explode('/', $path))); // Better handling of slashes
 
+// Path should be: ["api", "users.php", "7"] or ["users.php", "7"] depending on your setup
+if (count($path_parts) >= 2 && is_numeric(end($path_parts))) {
+    $user_id = (int)end($path_parts);
+}
 // Helper function to send JSON response
 function sendResponse($success, $data = null, $message = '', $statusCode = 200) {
     http_response_code($statusCode);
@@ -40,7 +42,9 @@ function sendResponse($success, $data = null, $message = '', $statusCode = 200) 
 
 // Authenticate user for all requests
 $current_user = $jwt->authenticate();
-
+error_log("Request URI: " . $_SERVER['REQUEST_URI']);
+error_log("Path parts: " . print_r($path_parts, true));
+error_log("Extracted user_id: " . ($user_id ?? 'null'));
 switch($method) {
     case 'GET':
         if ($user_id) {
@@ -194,39 +198,39 @@ switch($method) {
             }
         }
         break;
-
     case 'DELETE':
         if (!$user_id) {
             sendResponse(false, null, 'User ID is required in URL', 400);
         }
         
-        // Only admins can delete users
-        $jwt->authorize(['admin'], $current_user);
-        
-        // Check if user exists
-        $existing_user = $user->getUserById($user_id);
-        if (!$existing_user) {
-            sendResponse(false, null, 'User not found', 404);
-        }
-        
-        // Prevent admin from deleting themselves
-        if ($current_user['user_id'] == $user_id) {
-            sendResponse(false, null, 'You cannot delete your own account', 400);
-        }
-        
         try {
-            $result = $user->deleteUser($user_id);
+            // Authenticate
+            $current_user = $jwt->authenticate();
             
-            if ($result) {
+            // Authorize (admin only)
+            $jwt->authorize(['admin'], $current_user);
+            
+            // Check if user exists
+            if (!$user->getUserById($user_id)) {
+                sendResponse(false, null, 'User not found', 404);
+            }
+            
+            // Prevent self-deletion
+            if ($current_user['user_id'] == $user_id) {
+                sendResponse(false, null, 'You cannot delete your own account', 400);
+            }
+            
+            // Perform deletion
+            if ($user->deleteUser($user_id)) {
                 sendResponse(true, null, 'User deleted successfully');
             } else {
                 sendResponse(false, null, 'Failed to delete user', 500);
             }
-        } catch (PDOException $e) {
-            sendResponse(false, null, 'Database error: ' . $e->getMessage(), 500);
+            
+        } catch (Exception $e) {
+            sendResponse(false, null, $e->getMessage(), 401);
         }
         break;
-
     default:
         sendResponse(false, null, 'Method not allowed', 405);
         break;
